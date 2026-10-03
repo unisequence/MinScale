@@ -11,15 +11,18 @@ full feature parity with the standard client.
 
 ## Status
 
-There is no production release yet. The only device study currently recorded
-is a short experiment on a Cudy TR1200 using Tailscale v1.98.3. It showed that
-feature selection and UPX can reduce the package size, but it did not cover
-DNS operation, sustained traffic, reconnect recovery, or a long soak. The test
-package was unsigned and is not suitable for production installation.
+There is no production release yet. MinScale tracks two separate experiments:
+a two-hour RAM study on an ARM64 MT7981 router and a short package-size study
+on a MIPS Cudy TR1200. The RAM profile has not been ported or benchmarked on the
+TR1200. The size experiment used Tailscale v1.98.3 and did not cover DNS,
+sustained traffic, reconnect recovery, or a long soak. Its test package was
+unsigned and is not suitable for production installation.
 
-See [the TR1200 experiment](docs/experiments/TR1200-v1.98.3.md) for the exact
-measurements and limitations. The historical build script is kept only to
-reproduce that experiment. It does not produce a supported release.
+See the [MT7981 memory study](docs/experiments/MT7981-memory-2026-09.md) and
+[TR1200 size experiment](docs/experiments/TR1200-v1.98.3.md) for the device-
+specific results and limitations. The historical MIPS build script only
+reproduces the size experiment; it does not enable the memory changes or
+produce a supported release.
 
 ## Goals
 
@@ -56,6 +59,12 @@ UPX reduced it to 4.04 MB and the test APK to 4.04 MB, compared with a 9.79 MB
 official APK. On the router, `tailscaled --version` took 2.84 seconds of user
 CPU with UPX and 0.06 seconds with the unpacked executable. These are results
 for that v1.98.3 build, not promises about later versions or other devices.
+
+The separate MT7981 study measured a 25.22 MiB connected-idle RSS median after
+a two-hour workload, compared with 41.75 MiB for the full upstream build and
+39.28 MiB for upstream with `GOGC=10`. That result came from a custom ARM64
+profile with code changes and runtime settings. It is not a result for the
+TR1200 MIPS build. The current MIPS recipe does not set `GOGC` or `GOMEMLIMIT`.
 
 No package binaries are stored in Git. Future release artifacts should be
 published with checksums, source and toolchain provenance, and signing details.
