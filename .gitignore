@@ -1,0 +1,10 @@
+/artifacts/
+/build/
+*.apk
+*.ipk
+*.key
+*.rsa
+*.rsa.pub
+*.pem
+*.prof
+*.pb.gz
