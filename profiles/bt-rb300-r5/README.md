@@ -1,4 +1,4 @@
-# Rebuilding the BT-RB300 r5 mwan3 evaluation package
+# Rebuilding the BT-RB300 r5 test prerelease
 
 This directory contains the selected build recipe, the existing r3 low-memory
 patches, the control decoder patch, the opt-in mwan3 startup patch, and the
@@ -7,8 +7,8 @@ It does not contain router state, registration credentials or signing keys.
 Nothing here uploads a release or modifies a router.
 
 The tested target is BT-RB300, MT7981, ARM64 v8.0, OpenWrt 25.12.5,
-Linux 6.12.94. These are local evaluation packages from a development snapshot,
-not a new supported Tailscale release. The package version retains the r3
+Linux 6.12.94. The compact package is a test prerelease from a development
+snapshot, not a new supported Tailscale release. The package version retains the r3
 snapshot prefix and increments its package revision to r5; the programs report
 `1.103.0-dev20260926-t2e67abd7d`.
 
@@ -107,7 +107,9 @@ and must never be included in build artifacts.
 The r4 experiment covered plain/compact replacement, concurrent CLI startup,
 CLI use while the service is stopped, uninstall with an open executable
 reference, and reinstallation of r3 with the same registration. The r5 test
-upgraded the installed r4 compact package and checked reboot startup.
+upgraded the installed r4 compact package, checked reboot startup, and ran
+a separate two-hour soak with seven load bursts. The final quiet RSS median
+was 25.46 MiB. See the release report for the exact measured APK and limits.
 
 On this BT-RB300 firmware, mwan3's rules previously intercepted Tailnet and
 MagicDNS traffic after reboot. The r5 opt-in makes Tailscale select its native

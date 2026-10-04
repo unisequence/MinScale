@@ -11,17 +11,15 @@ full feature parity with the standard client.
 
 ## Status
 
-The first [BT-RB300 release candidate](docs/releases/BT-RB300-r4-rc1.md) is a
+The [BT-RB300 r5 test prerelease](docs/releases/BT-RB300-r5-rc1.md) is a
 signed, compact ARM64 APK tested on OpenWrt 25.12.5. It completed a two-hour
-traffic soak at 25.27 MiB median RSS in the final quiet interval. It is a
-prerelease from a pinned Tailscale development snapshot, with a known `mwan3`
-routing conflict on the test firmware. It is not a general OpenWrt package or
-a production-ready Tailscale replacement.
-
-An [experimental r5 profile](profiles/bt-rb300-r5/README.md) adds an opt-in
-workaround for that `mwan3` boot race. It passed a real reboot and short
-network tests on the BT-RB300; see the [test report](docs/experiments/BT-RB300-mwan3-r5-2026-10.md).
-The r5 APK has not completed a new long soak or been released.
+traffic soak at 25.46 MiB median RSS in the final quiet interval. It adds an
+opt-in workaround for the `mwan3` boot race found on this firmware; the option
+is off by default. The [r5 profile](profiles/bt-rb300-r5/README.md) records the
+source and package recipe. The [r4 report](docs/releases/BT-RB300-r4-rc1.md)
+remains available for comparison. These prereleases are built from a pinned
+Tailscale development snapshot and are not general OpenWrt packages or
+production-ready Tailscale replacements.
 
 The separate MIPS Cudy TR1200 size experiment used Tailscale v1.98.3 and did
 not cover DNS, sustained traffic, reconnect recovery, or a long soak. Its test
@@ -50,7 +48,7 @@ profiles, packaging, and reproducible measurements.
 ## Production use
 
 The BT-RB300 APK is published for testing on the stated device and firmware.
-Read its [known limits and installation notes](docs/releases/BT-RB300-r4-rc1.md)
+Read its [known limits and installation notes](docs/releases/BT-RB300-r5-rc1.md)
 before trying it on a router that carries live traffic. The historical TR1200
 package is not a production build. Before any MinScale package is marked for
 production, it must pass [the release checklist](docs/RELEASE-CHECKLIST.md) on
@@ -77,6 +75,6 @@ a two-hour workload, compared with 41.75 MiB for the full upstream build and
 profile with code changes and runtime settings. It is not a result for the
 TR1200 MIPS build. The current MIPS recipe does not set `GOGC` or `GOMEMLIMIT`.
 
-No package binaries are stored in Git. The BT-RB300 build recipe is in
-[`profiles/bt-rb300-r4`](profiles/bt-rb300-r4); the APK, public signing key,
+No package binaries are stored in Git. The current BT-RB300 build recipe is in
+[`profiles/bt-rb300-r5`](profiles/bt-rb300-r5); the APK, public signing key,
 checksums and test report are attached to its prerelease.
