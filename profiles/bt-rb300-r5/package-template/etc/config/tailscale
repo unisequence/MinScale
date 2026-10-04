@@ -1,0 +1,16 @@
+config settings 'settings'
+	option log_stderr '1'
+	option log_stdout '1'
+	option port '41641'
+	option state_file '/etc/tailscale/tailscaled.state'
+	# default to using nftables - change below to 'iptables' if still using iptables
+	option fw_mode 'nftables'
+	option gogc '10'
+	option gomemlimit '24MiB'
+	# Opt in if mwan3's rules are created after tailscaled starts at boot.
+	# Uses Tailscale's existing OpenWrt policy priority (13xx).
+	option mwan3_compat '0'
+	# Optional Go runtime controls for devices with limited RAM:
+	# gogc sets the garbage-collection target percentage.
+	# gomemlimit sets a soft Go-managed memory limit, not an RSS limit.
+	# These defaults were measured on an ARM64 MT7981; review RAM and CPU on other devices.

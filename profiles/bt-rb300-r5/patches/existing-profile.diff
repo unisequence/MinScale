@@ -1,0 +1,573 @@
+diff --git a/ipn/localapi/localapi.go b/ipn/localapi/localapi.go
+index d864396ec..c2cfae283 100644
+--- a/ipn/localapi/localapi.go
++++ b/ipn/localapi/localapi.go
+@@ -688,6 +688,7 @@ func (h *Handler) serveMetrics(w http.ResponseWriter, r *http.Request) {
+ 		return
+ 	}
+ 	w.Header().Set("Content-Type", "text/plain")
++	writeLowMemoryMetrics(w)
+ 	clientmetric.WritePrometheusExpositionFormat(w)
+ }
+ 
+diff --git a/ipn/localapi/localapi_test.go b/ipn/localapi/localapi_test.go
+index 14e9d5ad2..5f6d7930e 100644
+--- a/ipn/localapi/localapi_test.go
++++ b/ipn/localapi/localapi_test.go
+@@ -25,6 +25,7 @@
+ 	"testing"
+ 
+ 	"tailscale.com/client/tailscale/apitype"
++	"tailscale.com/feature/buildfeatures"
+ 	"tailscale.com/health"
+ 	"tailscale.com/ipn"
+ 	"tailscale.com/ipn/ipnauth"
+@@ -108,8 +109,13 @@ func TestSetPushDeviceToken(t *testing.T) {
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	if res.StatusCode != 200 {
+-		t.Errorf("res.StatusCode=%d, want 200. body: %s", res.StatusCode, body)
++	wantStatus := http.StatusOK
++	if !buildfeatures.HasDebug {
++		wantStatus = http.StatusNotFound
++		want = "" // The excluded endpoint must not modify hostinfo.
++	}
++	if res.StatusCode != wantStatus {
++		t.Errorf("res.StatusCode=%d, want %d. body: %s", res.StatusCode, wantStatus, body)
+ 	}
+ 	if got := h.b.GetPushDeviceToken(); got != want {
+ 		t.Errorf("hostinfo.PushDeviceToken=%q, want %q", got, want)
+@@ -522,108 +528,6 @@ func TestServeUserProfile(t *testing.T) {
+ 	})
+ }
+ 
+-func TestShouldDenyServeConfigForGOOSAndUserContext(t *testing.T) {
+-	newHandler := func(connIsLocalAdmin bool) *Handler {
+-		return handlerForTest(t, &Handler{
+-			Actor: &ipnauth.TestActor{LocalAdmin: connIsLocalAdmin},
+-			b:     newTestLocalBackend(t),
+-		})
+-	}
+-	tests := []struct {
+-		name     string
+-		configIn *ipn.ServeConfig
+-		h        *Handler
+-		wantErr  bool
+-	}{
+-		{
+-			name: "not-path-or-unix-handler",
+-			configIn: &ipn.ServeConfig{
+-				Web: map[ipn.HostPort]*ipn.WebServerConfig{
+-					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
+-						"/": {Proxy: "http://127.0.0.1:3000"},
+-					}},
+-				},
+-			},
+-			h:       newHandler(false),
+-			wantErr: false,
+-		},
+-		{
+-			name: "path-handler-admin",
+-			configIn: &ipn.ServeConfig{
+-				Web: map[ipn.HostPort]*ipn.WebServerConfig{
+-					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
+-						"/": {Path: "/tmp"},
+-					}},
+-				},
+-			},
+-			h:       newHandler(true),
+-			wantErr: false,
+-		},
+-		{
+-			name: "path-handler-not-admin",
+-			configIn: &ipn.ServeConfig{
+-				Web: map[ipn.HostPort]*ipn.WebServerConfig{
+-					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
+-						"/": {Path: "/tmp"},
+-					}},
+-				},
+-			},
+-			h:       newHandler(false),
+-			wantErr: true,
+-		},
+-		{
+-			name: "unix-handler-admin",
+-			configIn: &ipn.ServeConfig{
+-				Web: map[ipn.HostPort]*ipn.WebServerConfig{
+-					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
+-						"/": {Proxy: "unix:/var/run/foo.sock"},
+-					}},
+-				},
+-			},
+-			h:       newHandler(true),
+-			wantErr: false,
+-		},
+-		{
+-			name: "unix-handler-not-admin",
+-			configIn: &ipn.ServeConfig{
+-				Web: map[ipn.HostPort]*ipn.WebServerConfig{
+-					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
+-						"/": {Proxy: "unix:/var/run/foo.sock"},
+-					}},
+-				},
+-			},
+-			h:       newHandler(false),
+-			wantErr: true,
+-		},
+-	}
+-
+-	for _, tt := range tests {
+-		for _, goos := range []string{"linux", "windows", "darwin", "illumos", "solaris"} {
+-			t.Run(goos+"-"+tt.name, func(t *testing.T) {
+-				err := authorizeServeConfigForGOOSAndUserContext(goos, tt.configIn, tt.h)
+-				gotErr := err != nil
+-				if gotErr != tt.wantErr {
+-					t.Errorf("authorizeServeConfigForGOOSAndUserContext() got error = %v, want error %v", err, tt.wantErr)
+-				}
+-			})
+-		}
+-	}
+-	t.Run("other-goos", func(t *testing.T) {
+-		configIn := &ipn.ServeConfig{
+-			Web: map[ipn.HostPort]*ipn.WebServerConfig{
+-				"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
+-					"/": {Path: "/tmp"},
+-				}},
+-			},
+-		}
+-		h := newHandler(false)
+-		err := authorizeServeConfigForGOOSAndUserContext("dos", configIn, h)
+-		if err != nil {
+-			t.Errorf("authorizeServeConfigForGOOSAndUserContext() got error = %v, want nil", err)
+-		}
+-	})
+-}
+-
+ // TestServeWatchIPNBus used to test that various WatchIPNBus mask flags
+ // changed the permissions required to access the endpoint.
+ // However, since the removal of the NotifyNoPrivateKeys flag requirement
+diff --git a/ipn/localapi/metrics_lowmem.go b/ipn/localapi/metrics_lowmem.go
+new file mode 100644
+index 000000000..bbe493492
+--- /dev/null
++++ b/ipn/localapi/metrics_lowmem.go
+@@ -0,0 +1,47 @@
++// Copyright (c) Tailscale Inc & contributors
++// SPDX-License-Identifier: BSD-3-Clause
++
++//go:build ts_lowmem_metrics
++
++package localapi
++
++import (
++	"fmt"
++	"net/http"
++	"runtime"
++	rmetrics "runtime/metrics"
++)
++
++// writeLowMemoryMetrics keeps memory observability available in optional builds
++// without the debug/pprof feature. It runs behind serveMetrics' write permission
++// check, on demand, without a background poller or a forced garbage collection.
++func writeLowMemoryMetrics(w http.ResponseWriter) {
++	var m runtime.MemStats
++	runtime.ReadMemStats(&m)
++	samples := [...]rmetrics.Sample{
++		{Name: "/gc/heap/live:bytes"},
++		{Name: "/cpu/classes/gc/total:cpu-seconds"},
++	}
++	rmetrics.Read(samples[:])
++	fmt.Fprintf(w, "goroutines %d\n", runtime.NumGoroutine())
++	for _, v := range []struct {
++		name  string
++		value uint64
++	}{
++		{"heap_alloc", m.HeapAlloc}, {"total_alloc", m.TotalAlloc}, {"sys", m.Sys},
++		{"heap_inuse", m.HeapInuse}, {"heap_sys", m.HeapSys}, {"heap_idle", m.HeapIdle},
++		{"heap_released", m.HeapReleased}, {"stack_inuse", m.StackInuse}, {"stack_sys", m.StackSys},
++		{"gc_sys", m.GCSys}, {"buck_hash_sys", m.BuckHashSys},
++		{"mallocs", m.Mallocs}, {"frees", m.Frees}, {"num_gc", uint64(m.NumGC)},
++		{"num_forced_gc", uint64(m.NumForcedGC)},
++	} {
++		fmt.Fprintf(w, "memstats_%s %d\n", v.name, v.value)
++	}
++	fmt.Fprintf(w, "memstats_gc_cpu_fraction %g\n", m.GCCPUFraction)
++	if samples[0].Value.Kind() == rmetrics.KindUint64 {
++		fmt.Fprintf(w, "go_runtime_gc_heap_live_bytes %d\n", samples[0].Value.Uint64())
++	}
++	if samples[1].Value.Kind() == rmetrics.KindFloat64 {
++		fmt.Fprintf(w, "go_runtime_cpu_classes_gc_total_cpu_seconds_total %g\n", samples[1].Value.Float64())
++	}
++}
+diff --git a/ipn/localapi/metrics_lowmem_default.go b/ipn/localapi/metrics_lowmem_default.go
+new file mode 100644
+index 000000000..b4406efb3
+--- /dev/null
++++ b/ipn/localapi/metrics_lowmem_default.go
+@@ -0,0 +1,10 @@
++// Copyright (c) Tailscale Inc & contributors
++// SPDX-License-Identifier: BSD-3-Clause
++
++//go:build !ts_lowmem_metrics
++
++package localapi
++
++import "net/http"
++
++func writeLowMemoryMetrics(http.ResponseWriter) {}
+diff --git a/ipn/localapi/metrics_lowmem_test.go b/ipn/localapi/metrics_lowmem_test.go
+new file mode 100644
+index 000000000..1cf240831
+--- /dev/null
++++ b/ipn/localapi/metrics_lowmem_test.go
+@@ -0,0 +1,48 @@
++// Copyright (c) Tailscale Inc & contributors
++// SPDX-License-Identifier: BSD-3-Clause
++
++//go:build ts_lowmem_metrics
++
++package localapi
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"strconv"
++	"strings"
++	"testing"
++)
++
++func TestLowMemoryMetricsAccessAndSnapshot(t *testing.T) {
++	h := new(Handler)
++	req := httptest.NewRequest(http.MethodGet, "http://local-tailscaled.sock/localapi/v0/metrics", nil)
++	denied := httptest.NewRecorder()
++	h.serveMetrics(denied, req)
++	if denied.Code != http.StatusForbidden || strings.Contains(denied.Body.String(), "memstats_") {
++		t.Fatalf("unauthorized metrics: %d %s", denied.Code, denied.Body.String())
++	}
++	h.PermitWrite = true
++	out := httptest.NewRecorder()
++	h.serveMetrics(out, req)
++	if out.Code != http.StatusOK {
++		t.Fatal(out.Code)
++	}
++	values := map[string]uint64{}
++	for _, line := range strings.Split(out.Body.String(), "\n") {
++		fields := strings.Fields(line)
++		if len(fields) == 2 {
++			if n, err := strconv.ParseUint(fields[1], 10, 64); err == nil {
++				values[fields[0]] = n
++			}
++		}
++	}
++	if values["goroutines"] == 0 || values["memstats_heap_alloc"] == 0 {
++		t.Fatal("missing runtime snapshot")
++	}
++	if values["memstats_heap_sys"] < values["memstats_heap_inuse"] || values["memstats_heap_inuse"] < values["memstats_heap_alloc"] {
++		t.Fatal("inconsistent heap snapshot")
++	}
++	if _, ok := values["memstats_num_forced_gc"]; !ok {
++		t.Fatal("missing forced-GC counter")
++	}
++}
+diff --git a/ipn/localapi/serve_authorize_test.go b/ipn/localapi/serve_authorize_test.go
+new file mode 100644
+index 000000000..629132094
+--- /dev/null
++++ b/ipn/localapi/serve_authorize_test.go
+@@ -0,0 +1,114 @@
++// Copyright (c) Tailscale Inc & contributors
++// SPDX-License-Identifier: BSD-3-Clause
++
++//go:build !ts_omit_serve
++
++package localapi
++
++import (
++	"tailscale.com/ipn"
++	"tailscale.com/ipn/ipnauth"
++	"testing"
++)
++
++func TestShouldDenyServeConfigForGOOSAndUserContext(t *testing.T) {
++	newHandler := func(connIsLocalAdmin bool) *Handler {
++		return handlerForTest(t, &Handler{
++			Actor: &ipnauth.TestActor{LocalAdmin: connIsLocalAdmin},
++			b:     newTestLocalBackend(t),
++		})
++	}
++	tests := []struct {
++		name     string
++		configIn *ipn.ServeConfig
++		h        *Handler
++		wantErr  bool
++	}{
++		{
++			name: "not-path-or-unix-handler",
++			configIn: &ipn.ServeConfig{
++				Web: map[ipn.HostPort]*ipn.WebServerConfig{
++					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
++						"/": {Proxy: "http://127.0.0.1:3000"},
++					}},
++				},
++			},
++			h:       newHandler(false),
++			wantErr: false,
++		},
++		{
++			name: "path-handler-admin",
++			configIn: &ipn.ServeConfig{
++				Web: map[ipn.HostPort]*ipn.WebServerConfig{
++					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
++						"/": {Path: "/tmp"},
++					}},
++				},
++			},
++			h:       newHandler(true),
++			wantErr: false,
++		},
++		{
++			name: "path-handler-not-admin",
++			configIn: &ipn.ServeConfig{
++				Web: map[ipn.HostPort]*ipn.WebServerConfig{
++					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
++						"/": {Path: "/tmp"},
++					}},
++				},
++			},
++			h:       newHandler(false),
++			wantErr: true,
++		},
++		{
++			name: "unix-handler-admin",
++			configIn: &ipn.ServeConfig{
++				Web: map[ipn.HostPort]*ipn.WebServerConfig{
++					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
++						"/": {Proxy: "unix:/var/run/foo.sock"},
++					}},
++				},
++			},
++			h:       newHandler(true),
++			wantErr: false,
++		},
++		{
++			name: "unix-handler-not-admin",
++			configIn: &ipn.ServeConfig{
++				Web: map[ipn.HostPort]*ipn.WebServerConfig{
++					"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
++						"/": {Proxy: "unix:/var/run/foo.sock"},
++					}},
++				},
++			},
++			h:       newHandler(false),
++			wantErr: true,
++		},
++	}
++
++	for _, tt := range tests {
++		for _, goos := range []string{"linux", "windows", "darwin", "illumos", "solaris"} {
++			t.Run(goos+"-"+tt.name, func(t *testing.T) {
++				err := authorizeServeConfigForGOOSAndUserContext(goos, tt.configIn, tt.h)
++				gotErr := err != nil
++				if gotErr != tt.wantErr {
++					t.Errorf("authorizeServeConfigForGOOSAndUserContext() got error = %v, want error %v", err, tt.wantErr)
++				}
++			})
++		}
++	}
++	t.Run("other-goos", func(t *testing.T) {
++		configIn := &ipn.ServeConfig{
++			Web: map[ipn.HostPort]*ipn.WebServerConfig{
++				"foo.test.ts.net:443": {Handlers: map[string]*ipn.HTTPHandler{
++					"/": {Path: "/tmp"},
++				}},
++			},
++		}
++		h := newHandler(false)
++		err := authorizeServeConfigForGOOSAndUserContext("dos", configIn, h)
++		if err != nil {
++			t.Errorf("authorizeServeConfigForGOOSAndUserContext() got error = %v, want nil", err)
++		}
++	})
++}
+diff --git a/logpolicy/logpolicy.go b/logpolicy/logpolicy.go
+index 78b3ccc13..9b6497859 100644
+--- a/logpolicy/logpolicy.go
++++ b/logpolicy/logpolicy.go
+@@ -634,10 +634,12 @@ func (opts Options) init(disableLogging bool) (*logtail.Config, *Policy) {
+ 	}
+ 
+ 	conf := logtail.Config{
+-		Collection:    newc.Collection,
+-		PrivateID:     newc.PrivateID,
+-		Stderr:        logWriter{console},
+-		CompressLogs:  true,
++		Collection: newc.Collection,
++		PrivateID:  newc.PrivateID,
++		Stderr:     logWriter{console},
++		// Disabled uploads use a discard transport. Compressing those batches
++		// only spends CPU and retains encoder resources for discarded output.
++		CompressLogs:  !disableLogging,
+ 		MaxUploadSize: opts.MaxUploadSize,
+ 		Bus:           opts.Bus,
+ 	}
+diff --git a/net/tstun/wrap.go b/net/tstun/wrap.go
+index 150827933..a29b02c07 100644
+--- a/net/tstun/wrap.go
++++ b/net/tstun/wrap.go
+@@ -1071,7 +1071,11 @@ func (t *Wrapper) injectedRead(res tunInjectedRead, slab []byte, packets []tun.R
+ 		}
+ 	}
+ 
+-	invertGSOChecksum(pkt, gso)
++	// Raw injected packets (including DNS and TSMP replies) already have a
++	// complete checksum and are also used in builds without netstack.
++	if res.packet != nil {
++		invertGSOChecksum(pkt, gso)
++	}
+ 	// Check if this is a packet for conn25-style app connectors,
+ 	// and perform the necessary NAT. The main case that requires
+ 	// NAT from netstack toward WireGuard is an SNAT on return traffic
+@@ -1093,7 +1097,9 @@ func (t *Wrapper) injectedRead(res tunInjectedRead, slab []byte, packets []tun.R
+ 		}
+ 	}
+ 	pc.snat(p)
+-	invertGSOChecksum(pkt, gso)
++	if res.packet != nil {
++		invertGSOChecksum(pkt, gso)
++	}
+ 
+ 	if res.packet != nil {
+ 		var gsoOptions tun.GSOOptions
+diff --git a/net/tstun/wrap_test.go b/net/tstun/wrap_test.go
+index 573f0df67..2191db587 100644
+--- a/net/tstun/wrap_test.go
++++ b/net/tstun/wrap_test.go
+@@ -28,6 +28,7 @@
+ 	"gvisor.dev/gvisor/pkg/buffer"
+ 	"gvisor.dev/gvisor/pkg/tcpip/stack"
+ 	"tailscale.com/disco"
++	"tailscale.com/feature/buildfeatures"
+ 	"tailscale.com/net/netaddr"
+ 	"tailscale.com/net/packet"
+ 	"tailscale.com/net/packet/checksum"
+@@ -442,6 +443,9 @@ func TestFilter(t *testing.T) {
+ 				}
+ 			}
+ 			if wasUDP {
++				if !buildfeatures.HasNetLog {
++					want = nil
++				}
+ 				if diff := cmp.Diff(got, want, cmpopts.EquateEmpty()); diff != "" {
+ 					t.Errorf("stats.TestExtract (-got +want):\n%s", diff)
+ 				}
+diff --git a/wgengine/magicsock/magicsock_test.go b/wgengine/magicsock/magicsock_test.go
+index 9619ee2c9..d544b1a63 100644
+--- a/wgengine/magicsock/magicsock_test.go
++++ b/wgengine/magicsock/magicsock_test.go
+@@ -47,6 +47,7 @@
+ 	"tailscale.com/derp/derpserver"
+ 	"tailscale.com/disco"
+ 	"tailscale.com/envknob"
++	"tailscale.com/feature/buildfeatures"
+ 	"tailscale.com/health"
+ 	"tailscale.com/ipn/ipnstate"
+ 	"tailscale.com/net/batching"
+@@ -1319,6 +1320,12 @@ func testTwoDevicePing(t *testing.T, d *devices) {
+ 	checkStats := func(t *testing.T, m *magicStack, wantConns []netlogtype.Connection) {
+ 		t.Helper()
+ 		defer m.counts.Reset()
++		if !buildfeatures.HasNetLog {
++			if counts := m.counts.Clone(); len(counts) != 0 {
++				t.Errorf("unexpected connection counts without netlog: %v", counts)
++			}
++			return
++		}
+ 		if err := tstest.WaitFor(5*time.Second, func() error {
+ 			counts := m.counts.Clone()
+ 			for _, conn := range wantConns {
+@@ -4426,7 +4433,7 @@ func TestConn_receiveIP(t *testing.T) {
+ 			case *endpoint:
+ 				wantNonzeroRxStats = true
+ 			}
+-			if tt.wantOk && wantNonzeroRxStats {
++			if buildfeatures.HasNetLog && tt.wantOk && wantNonzeroRxStats {
+ 				wantRxBytes := uint64(len(tt.b))
+ 				wantPhy := map[netlogtype.Connection]netlogtype.Counts{
+ 					{Dst: tt.ipp}: {
+diff --git a/wgengine/netstack/netstack_test.go b/wgengine/netstack/netstack_test.go
+index 6b82a8a03..4dedd6de7 100644
+--- a/wgengine/netstack/netstack_test.go
++++ b/wgengine/netstack/netstack_test.go
+@@ -23,6 +23,7 @@
+ 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
+ 	"gvisor.dev/gvisor/pkg/waiter"
+ 	"tailscale.com/envknob"
++	"tailscale.com/feature/buildfeatures"
+ 	"tailscale.com/ipn"
+ 	"tailscale.com/ipn/ipnlocal"
+ 	"tailscale.com/ipn/store/mem"
+@@ -504,7 +505,7 @@ func TestShouldProcessInbound(t *testing.T) {
+ 
+ 				i.atomicIsLocalIPFunc.Store(looksLikeATailscaleSelfAddress)
+ 			},
+-			want: true,
++			want: buildfeatures.HasServe,
+ 		},
+ 		{
+ 			name: "udp-on-service-vip-no-listener-ipv4",
+@@ -574,7 +575,7 @@ func TestShouldProcessInbound(t *testing.T) {
+ 
+ 				i.atomicIsLocalIPFunc.Store(looksLikeATailscaleSelfAddress)
+ 			},
+-			want: true,
++			want: buildfeatures.HasServe,
+ 		},
+ 		{
+ 			name: "udp-on-service-vip-no-listener-ipv6",
+@@ -1205,7 +1206,8 @@ func TestAcceptTCPLoopbackForwardVsRST(t *testing.T) {
+ 	const serviceName = "svc:test"
+ 
+ 	cases := []struct {
+-		name string
++		name          string
++		requiresServe bool
+ 		// configure runs inside makeNetstack, before Start.
+ 		configure func(*Impl)
+ 		// afterStart runs after Start, for state that requires the backend to be
+@@ -1242,7 +1244,8 @@ func TestAcceptTCPLoopbackForwardVsRST(t *testing.T) {
+ 			wantForward: false,
+ 		},
+ 		{
+-			name: "VIPServiceUnservedPortIsRST",
++			name:          "VIPServiceUnservedPortIsRST",
++			requiresServe: true,
+ 			configure: func(impl *Impl) {
+ 				impl.ProcessSubnets = false
+ 				impl.ProcessLocalIPs = false
+@@ -1295,6 +1298,9 @@ func TestAcceptTCPLoopbackForwardVsRST(t *testing.T) {
+ 
+ 	for _, tc := range cases {
+ 		t.Run(tc.name, func(t *testing.T) {
++			if tc.requiresServe && !buildfeatures.HasServe {
++				t.Skip("Serve is excluded by build tag")
++			}
+ 			impl := makeNetstack(t, tc.configure)
+ 			if tc.afterStart != nil {
+ 				tc.afterStart(t, impl)
+@@ -1674,13 +1680,13 @@ func TestShouldSendToHost(t *testing.T) {
+ 			name: "from_service_ip_to_local_ip",
+ 			src:  netip.AddrPortFrom(tailscaleServiceIP4, 80),
+ 			dst:  netip.AddrPortFrom(selfIP4, 12345),
+-			want: true,
++			want: buildfeatures.HasServe,
+ 		},
+ 		{
+ 			name: "from_service_ip_to_local_ip_v6",
+ 			src:  netip.AddrPortFrom(tailscaleServiceIP6, 80),
+ 			dst:  netip.AddrPortFrom(selfIP6, 12345),
+-			want: true,
++			want: buildfeatures.HasServe,
+ 		},
+ 		// Traffic from remote IPs to Tailscale Service IPs should be sent over WireGuard.
+ 		{

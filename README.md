@@ -18,6 +18,11 @@ prerelease from a pinned Tailscale development snapshot, with a known `mwan3`
 routing conflict on the test firmware. It is not a general OpenWrt package or
 a production-ready Tailscale replacement.
 
+An [experimental r5 profile](profiles/bt-rb300-r5/README.md) adds an opt-in
+workaround for that `mwan3` boot race. It passed a real reboot and short
+network tests on the BT-RB300; see the [test report](docs/experiments/BT-RB300-mwan3-r5-2026-10.md).
+The r5 APK has not completed a new long soak or been released.
+
 The separate MIPS Cudy TR1200 size experiment used Tailscale v1.98.3 and did
 not cover DNS, sustained traffic, reconnect recovery, or a long soak. Its test
 package was unsigned. The BT-RB300 build has not been ported to the TR1200.

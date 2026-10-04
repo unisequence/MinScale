@@ -1,0 +1,20 @@
+--- a/wgengine/router/osrouter/router_linux.go
++++ b/wgengine/router/osrouter/router_linux.go
+@@ -184,7 +184,12 @@
+-	isMWAN3, err := checkOpenWRTUsingMWAN3()
+-	if err != nil {
+-		r.logf("error checking mwan3 installation: %v", err)
+-	} else if isMWAN3 {
++	if os.Getenv("MINSCALE_FORCE_MWAN3") == "1" {
+ 		r.ipPolicyPrefBase = 1300
+-		r.logf("mwan3 on openWRT detected, switching policy base priority to 1300")
++		r.logf("mwan3 policy priority forced by MinScale configuration")
++	} else {
++		isMWAN3, err := checkOpenWRTUsingMWAN3()
++		if err != nil {
++			r.logf("error checking mwan3 installation: %v", err)
++		} else if isMWAN3 {
++			r.ipPolicyPrefBase = 1300
++			r.logf("mwan3 on openWRT detected, switching policy base priority to 1300")
++		}
+ 	}
