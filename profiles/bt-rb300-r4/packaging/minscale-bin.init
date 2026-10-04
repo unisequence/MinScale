@@ -1,0 +1,13 @@
+#!/bin/sh /etc/rc.common
+# Mount the executable image even when the VPN service is disabled.
+START=19
+
+start() {
+    /usr/libexec/minscale-image ensure
+}
+
+# Keep the CLI available after stopping the VPN service. Package removal and
+# upgrades unmount explicitly after stopping tailscaled.
+stop() {
+    return 0
+}

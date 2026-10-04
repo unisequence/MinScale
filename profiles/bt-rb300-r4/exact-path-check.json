@@ -1,0 +1,5 @@
+{
+  "sha256": "f0a9d6630333a007a71a2eecdb53a36499a4dfbaa051cc9e2e6463c8411d10e6",
+  "matches_measured": true,
+  "note": "Independent fetched checkout and overlay; original unchanged WireGuard directory reused so embedded absolute module path matches."
+}

@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+[ "${IPKG_NO_SCRIPT:-}" = 1 ] && exit 0
+[ -n "${IPKG_INSTROOT:-}" ] && exit 0
+command -v flock >/dev/null || {
+    echo 'MinScale compact needs the flock applet.' >&2
+    exit 1
+}
+grep -qw squashfs /proc/filesystems || {
+    echo 'MinScale compact needs kernel SquashFS support with XZ decoding.' >&2
+    exit 1
+}
+[ -d /sys/module/loop ] || modprobe loop || {
+    echo 'MinScale compact needs built-in loop support or a matching kmod-loop.' >&2
+    exit 1
+}

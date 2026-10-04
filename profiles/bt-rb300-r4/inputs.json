@@ -1,0 +1,30 @@
+{
+  "upstream_repository": "https://github.com/tailscale/tailscale.git",
+  "base_commit": "b1664580dc5081b539329905b0434d788f170354",
+  "profile_commit": "2e67abd7d026e2abd790e913a5c075eebef979f0",
+  "go_toolchain_rev": "24ee2fd0610e6c505ee4ec061a81215afe119d1f",
+  "toolchain": "go version go1.27.1 linux/amd64",
+  "goos": "linux",
+  "goarch": "arm64",
+  "goarm64": "v8.0",
+  "cgo_enabled": "0",
+  "daemon_sha256": "f0a9d6630333a007a71a2eecdb53a36499a4dfbaa051cc9e2e6463c8411d10e6",
+  "cli_sha256": "fb97cb982435f7f0d797859bb920614fc4cdafcc0c2ff107d8d4418ec5d23a81",
+  "wireguard_module": "github.com/tailscale/wireguard-go",
+  "wireguard_version": "v0.0.0-20260923222926-383e864386e4",
+  "gcflags": [
+    "-gcflags=gvisor.dev/gvisor/...=-l",
+    "-gcflags=tailscale.com/control/...=-l",
+    "-gcflags=tailscale.com/ipn/...=-l",
+    "-gcflags=crypto/tls=-l",
+    "-gcflags=crypto/x509=-l",
+    "-gcflags=encoding/json=-l",
+    "-gcflags=net/http=-l",
+    "-gcflags=reflect=-l",
+    "-gcflags=tailscale.com/control/controlclient="
+  ],
+  "build_note": "zstd source is overlaid so the exact clean profile commit remains stamped in both executables; patch provenance recorded separately",
+  "version_tag": "v1.103.0-pre",
+  "version_tag_commit": "ac33a4cc1a33c6eb9f48eae0c2eca08e0c5b56c5",
+  "measured_work_directory": "/home/uni/minscale-stage3-20261003"
+}

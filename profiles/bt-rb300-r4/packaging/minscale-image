@@ -1,0 +1,60 @@
+#!/bin/sh
+set -eu
+
+base=/usr/lib/minscale
+point=$base/bin
+image=$base/bin.squashfs
+lockdir=/var/run/minscale
+
+mounted() {
+    grep -qs ' /usr/lib/minscale/bin squashfs ' /proc/mounts
+}
+
+ready() {
+    mounted || return 1
+    [ -r "$base/image-id" ] && [ -r "$point/image-id" ] || return 1
+    read -r expected < "$base/image-id"
+    read -r actual < "$point/image-id"
+    [ "$actual" = "$expected" ] && [ -x "$point/tailscaled" ] && [ -x "$point/tailscale" ]
+}
+
+case "${1:-}" in
+ensure)
+    ready && exit 0
+    ;;
+unmount)
+    mounted || exit 0
+    ;;
+*) echo 'Usage: minscale-image ensure|unmount' >&2; exit 2;;
+esac
+
+if [ "$(id -u)" != 0 ]; then
+    echo 'MinScale image is not mounted. Ask root to start /etc/init.d/minscale-bin.' >&2
+    exit 1
+fi
+mkdir -p "$lockdir"
+chmod 755 "$lockdir"
+exec 9>"$lockdir/image.lock"
+flock -x 9
+
+case "$1" in
+ensure)
+    ready && exit 0
+    if mounted; then
+        echo 'Removing an older MinScale image mount before starting the new build.' >&2
+        umount "$point"
+    fi
+    mkdir -p "$point"
+    mount -t squashfs -o loop,ro,nosuid,nodev "$image" "$point"
+    if ! ready; then
+        umount "$point"
+        echo 'MinScale image identity check failed.' >&2
+        exit 1
+    fi
+    ;;
+unmount)
+    if mounted; then
+        umount "$point"
+    fi
+    ;;
+esac

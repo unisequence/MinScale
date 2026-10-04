@@ -1,0 +1,11 @@
+--- a/control/controlclient/direct.go
++++ b/control/controlclient/direct.go
+@@ -1493,7 +1493,7 @@
+ 		return nil
+ 	}
+ 
+-	b, err := zstdframe.AppendDecode(nil, compressedMsg, zstdframe.MaxDecodedSize(maxDecodedMapResponseSize))
++	b, err := zstdframe.AppendDecode(nil, compressedMsg, zstdframe.MaxDecodedSize(maxDecodedMapResponseSize), zstdframe.LowMemory(true))
+ 	if err != nil {
+ 		return err
+ 	}

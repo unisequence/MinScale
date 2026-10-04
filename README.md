@@ -11,12 +11,16 @@ full feature parity with the standard client.
 
 ## Status
 
-There is no production release yet. MinScale tracks two separate experiments:
-a two-hour RAM study on an ARM64 MT7981 router and a short package-size study
-on a MIPS Cudy TR1200. The RAM profile has not been ported or benchmarked on the
-TR1200. The size experiment used Tailscale v1.98.3 and did not cover DNS,
-sustained traffic, reconnect recovery, or a long soak. Its test package was
-unsigned and is not suitable for production installation.
+The first [BT-RB300 release candidate](docs/releases/BT-RB300-r4-rc1.md) is a
+signed, compact ARM64 APK tested on OpenWrt 25.12.5. It completed a two-hour
+traffic soak at 25.27 MiB median RSS in the final quiet interval. It is a
+prerelease from a pinned Tailscale development snapshot, with a known `mwan3`
+routing conflict on the test firmware. It is not a general OpenWrt package or
+a production-ready Tailscale replacement.
+
+The separate MIPS Cudy TR1200 size experiment used Tailscale v1.98.3 and did
+not cover DNS, sustained traffic, reconnect recovery, or a long soak. Its test
+package was unsigned. The BT-RB300 build has not been ported to the TR1200.
 
 See the [MT7981 memory study](docs/experiments/MT7981-memory-2026-09.md) and
 [TR1200 size experiment](docs/experiments/TR1200-v1.98.3.md) for the device-
@@ -40,10 +44,12 @@ profiles, packaging, and reproducible measurements.
 
 ## Production use
 
-Do not deploy the historical test package from the experiment as a production
-build. Before a MinScale package is marked for production, it needs a current
-upstream base, a pinned and reviewable build environment, a package signature,
-and the target-device checks in [the release checklist](docs/RELEASE-CHECKLIST.md).
+The BT-RB300 APK is published for testing on the stated device and firmware.
+Read its [known limits and installation notes](docs/releases/BT-RB300-r4-rc1.md)
+before trying it on a router that carries live traffic. The historical TR1200
+package is not a production build. Before any MinScale package is marked for
+production, it must pass [the release checklist](docs/RELEASE-CHECKLIST.md) on
+its declared target.
 
 Custom packages install files under the same `/usr/sbin/tailscale*` paths as
 the official OpenWrt package. Remove the other package before installing a
@@ -66,5 +72,6 @@ a two-hour workload, compared with 41.75 MiB for the full upstream build and
 profile with code changes and runtime settings. It is not a result for the
 TR1200 MIPS build. The current MIPS recipe does not set `GOGC` or `GOMEMLIMIT`.
 
-No package binaries are stored in Git. Future release artifacts should be
-published with checksums, source and toolchain provenance, and signing details.
+No package binaries are stored in Git. The BT-RB300 build recipe is in
+[`profiles/bt-rb300-r4`](profiles/bt-rb300-r4); the APK, public signing key,
+checksums and test report are attached to its prerelease.
